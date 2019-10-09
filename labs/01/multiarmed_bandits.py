@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 
-#test
+#dd7e3410-38c0-11e8-9b58-00505601122b
+#6e14ef6b-3281-11e8-9de3-00505601122b
+
 import argparse
 import sys
 
@@ -41,6 +43,33 @@ parser.add_argument("--c", default=1, type=float, help="Confidence level in ucb 
 parser.add_argument("--epsilon", default=0.1, type=float, help="Exploration factor (if applicable).")
 parser.add_argument("--initial", default=0, type=float, help="Initial value function levels (if applicable).")
 
+
+def greedy(q, args):
+    if np.random.uniform(size=1)[0] > args.epsilon:
+        return np.argmax(q)
+    else:
+        return np.random.randint(low=0, high=args.bandits, size=1)[0]
+
+
+def ucb(q, n, args):
+    for i in range(args.bandits):
+        if n[i] == 0:
+            return i
+
+    t = np.sum(n)
+    return np.argmax(q + args.c * np.sqrt(np.log(t) / n))
+
+
+def softmax(h, action):
+    return np.math.exp(h[action]) / np.sum([np.math.exp(i) for i in h])
+
+def gradient(h, bandits):
+    distribution = [softmax(h, i) for i in range(bandits)]
+    return np.random.choice(bandits, 1, p = distribution)[0]
+
+
+
+
 def main(args):
     # Fix random seed
     np.random.seed(args.seed)
@@ -48,28 +77,47 @@ def main(args):
     # Create environment
     env = MultiArmedBandits(args.bandits, args.episode_length)
 
+    rewards = np.zeros(args.episodes)
     for episode in range(args.episodes):
         env.reset()
 
         # TODO: Initialize parameters (depending on mode).
+        q = np.full(shape = args.bandits, fill_value=args.initial)
+        n = np.zeros(args.bandits)
+        h = np.full(args.bandits, fill_value=args.initial)
+
 
         done = False
+        steps = 0
+        reward_sum = 0
         while not done:
             # TODO: Action selection according to mode
             if args.mode == "greedy":
-                action = None
+                action = greedy(q, args)
             elif args.mode == "ucb":
-                action = None
+                action = ucb(q, n, args)
             elif args.mode == "gradient":
-                action = None
+                action = gradient(h, args.bandits)
+                
 
             _, reward, done, _ = env.step(action)
-
             # TODO: Update parameters
+            n[action] += 1
+            steps += 1
+            reward_sum += reward
+            if args.mode == "gradient":
+                h[action] += args.alpha * reward * (1.0 - softmax(h, action)) 
+            elif args.alpha != 0:
+                q[action] += args.alpha * (reward - q[action])
+            else:
+                q[action] += (reward - q[action]) / n[action]
+
+        rewards[episode] = reward_sum / steps
 
     # TODO: For every episode, compute its average reward (a single number),
     # obtaining `args.episodes` values. Then return the final score as
     # mean and standard deviation of these `args.episodes` values.
+    return np.mean(rewards), np.std(rewards)
 
 if __name__ == "__main__":
     mean, std = main(parser.parse_args())
