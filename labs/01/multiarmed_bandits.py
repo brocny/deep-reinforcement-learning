@@ -37,7 +37,7 @@ parser.add_argument("--episodes", default=100, type=int, help="Training episodes
 parser.add_argument("--episode_length", default=1000, type=int, help="Number of trials per episode.")
 parser.add_argument("--seed", default=42, type=int, help="Random seed.")
 
-parser.add_argument("--mode", default="greedy", type=str, help="Mode to use -- greedy, ucb and gradient.")
+parser.add_argument("--mode", default="gradient", type=str, help="Mode to use -- greedy, ucb and gradient.")
 parser.add_argument("--alpha", default=0, type=float, help="Learning rate to use (if applicable).")
 parser.add_argument("--c", default=1, type=float, help="Confidence level in ucb (if applicable).")
 parser.add_argument("--epsilon", default=0.1, type=float, help="Exploration factor (if applicable).")
@@ -50,7 +50,6 @@ def greedy(q, args):
     else:
         return np.random.randint(low=0, high=args.bandits, size=1)[0]
 
-
 def ucb(q, n, args):
     for i in range(args.bandits):
         if n[i] == 0:
@@ -59,16 +58,14 @@ def ucb(q, n, args):
     t = np.sum(n)
     return np.argmax(q + args.c * np.sqrt(np.log(t) / n))
 
-
-def softmax(h, action):
-    return np.math.exp(h[action]) / np.sum([np.math.exp(i) for i in h])
+def softmax(h):
+    dist = [np.math.exp(val) for val in h]
+    total = np.sum(dist)
+    return [val / total for val in dist]
 
 def gradient(h, bandits):
-    distribution = [softmax(h, i) for i in range(bandits)]
-    return np.random.choice(bandits, 1, p = distribution)[0]
-
-
-
+    distribution = softmax(h)
+    return np.random.choice(bandits, p = distribution)
 
 def main(args):
     # Fix random seed
@@ -86,7 +83,6 @@ def main(args):
         n = np.zeros(args.bandits)
         h = np.full(args.bandits, fill_value=args.initial)
 
-
         done = False
         steps = 0
         reward_sum = 0
@@ -97,8 +93,7 @@ def main(args):
             elif args.mode == "ucb":
                 action = ucb(q, n, args)
             elif args.mode == "gradient":
-                action = gradient(h, args.bandits)
-                
+                action = gradient(h, args.bandits) 
 
             _, reward, done, _ = env.step(action)
             # TODO: Update parameters
@@ -106,7 +101,9 @@ def main(args):
             steps += 1
             reward_sum += reward
             if args.mode == "gradient":
-                h[action] += args.alpha * reward * (1.0 - softmax(h, action)) 
+                dist = softmax(h)
+                for a, p in enumerate(dist):
+                    h[a] += args.alpha * reward * ((a == action) - p)
             elif args.alpha != 0:
                 q[action] += args.alpha * (reward - q[action])
             else:
