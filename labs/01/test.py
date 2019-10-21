@@ -9,7 +9,6 @@ model[2][0] = 3
 model[5][0] = 5
 
 
-print(np.math.exp(-100))
 
 
 
