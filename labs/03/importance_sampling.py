@@ -36,7 +36,7 @@ if __name__ == "__main__":
 
 
 
-        list.reverse(episode)
+        episode.reverse()
         # TODO: Update V using weighted importance sampling.
         # slide 31
         G = 0.0
@@ -47,7 +47,11 @@ if __name__ == "__main__":
             G += reward
             C[state] += W
             V[state] += W / C[state] * (G - V[state])
+<<<<<<< HEAD
             W *= 0.5 / 0.25
+=======
+            W *= 2 # 0.5  /0.25
+>>>>>>> 52a397925e2df089c40dad893d35531ad2a76d73
 
             
 
