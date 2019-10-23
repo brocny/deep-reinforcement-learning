@@ -23,6 +23,13 @@ class ExpDecay:
         return current
 
 
+def progress_log(Q, progress):
+    print("{0} %".format(progress))
+    for i in range(100):
+        state, done = env.reset(), False
+        while not done:
+            action = np.argmax(Q[state])
+            state, reward, done, _ = env.step(action)       
 
 
 if __name__ == "__main__":
@@ -32,7 +39,8 @@ if __name__ == "__main__":
     # Parse arguments
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--episodes", default=7500, type=int, help="Training episodes.")
+    parser.add_argument("--episodes", default=500, type=int, help="Training episodes.")
+    parser.add_argument("--from_expert_episodes", default=500, type=int, help="Learn from expert episodes.")
     parser.add_argument("--render_each", default=0, type=int, help="Render some episodes.")
 
     parser.add_argument("--alpha", default=0.05, type=float, help="Learning rate.")
@@ -52,28 +60,23 @@ if __name__ == "__main__":
     # The overall structure of the code follows.
     Q = np.zeros([env.states, env.actions])
 
-
     alpha_scheduler = ExpDecay(args.alpha, args.alpha_final, args.episodes)
     epsilon_scheduler = ExpDecay(args.epsilon, args.epsilon_final, args.episodes)
 
-    training = True
-    for episode in range(args.episodes):
-
-        # To generate expert trajectory, you can use
-        # trajectory = list((action, reward, state)) 
-        # state = final state
+    print('Learning from expert')
+    # learn from expert
+    for episode in range(args.from_expert_episodes):
+        if episode % (args.from_expert_episodes / 10) == 0:
+            progress_log(Q, episode / args.from_expert_episodes * 100)
+        # trajectory = list((action, reward, state)), state = initial state
         state, trajectory = env.expert_trajectory()
+        alpha = alpha_scheduler.get()
+        for action, reward, new_state in trajectory: 
+            Q[state, action] += alpha * (reward + args.gamma * Q[new_state].max() - Q[state, action])
+            state = new_state
 
-        # Perform a training episode
-        epsilon, alpha = epsilon_scheduler.get(), alpha_scheduler.get()
-        state, done = env.reset(), False
-        while not done:
-            if args.render_each and env.episode and env.episode % args.render_each == 0:
-                env.render()
-            action = Q[state].argmax() if np.random.uniform() > epsilon else np.random.randint(env.actions)
-            next_state, reward, done, _ = env.step(action)
-            Q[state, action] += alpha * (reward + args.gamma * Q[next_state].max() - Q[state, action])
-            state = next_state 
+
+
 
 
     # Perform last 100 evaluation episodes
