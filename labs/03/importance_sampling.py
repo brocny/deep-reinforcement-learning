@@ -36,17 +36,17 @@ if __name__ == "__main__":
 
 
 
-        list.reverse(episode)
+        episode.reverse()
         # TODO: Update V using weighted importance sampling.
         # slide 31
         G = 0
         W = 1
         for state, action, reward in episode:
+            if action == 0 or action == 3:
+                break
             G += reward
             C[state] += W
             V[state] += W / C[state] * (G - V[state])
-            if action == 0 or action == 3:
-                break
             W *= 2 # 0.5  /0.25
 
             
