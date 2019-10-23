@@ -18,6 +18,7 @@ if __name__ == "__main__":
     states = env.observation_space.n
     actions = env.action_space.n
 
+
     # Behaviour policy is uniformly random.
     # Target policy uniformly chooses either action 1 or 2.
     V = np.zeros(states)
@@ -25,7 +26,6 @@ if __name__ == "__main__":
 
     for _ in range(args.episodes):
         state, done = env.reset(), False
-
         # Generate episode
         episode = []
         while not done:
@@ -34,7 +34,22 @@ if __name__ == "__main__":
             episode.append((state, action, reward))
             state = next_state
 
+
+
+        list.reverse(episode)
         # TODO: Update V using weighted importance sampling.
+        G = 0
+        W = 1
+        for state, action, reward in episode:
+            G += reward
+            C[state] += W
+            V[state] += W / C[state] * (G - V[state])
+            # action cannot happen in target policy
+            if action == 0 or action == 3:
+                break
+            W *= 2 # 0.5  /0.25
+
+            
 
     # Print the final value function V
     for row in V.reshape(4, 4):
