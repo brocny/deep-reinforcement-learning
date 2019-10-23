@@ -38,6 +38,7 @@ if __name__ == "__main__":
 
         list.reverse(episode)
         # TODO: Update V using weighted importance sampling.
+        # slide 31
         G = 0
         W = 1
         for state, action, reward in episode:
