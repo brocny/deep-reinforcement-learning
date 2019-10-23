@@ -2,6 +2,9 @@
 import numpy as np
 import gym
 
+#dd7e3410-38c0-11e8-9b58-00505601122b
+#6e14ef6b-3281-11e8-9de3-00505601122b
+
 if __name__ == "__main__":
     # Fix random seed
     np.random.seed(42)
@@ -47,11 +50,7 @@ if __name__ == "__main__":
             G += reward
             C[state] += W
             V[state] += W / C[state] * (G - V[state])
-<<<<<<< HEAD
-            W *= 0.5 / 0.25
-=======
             W *= 2 # 0.5  /0.25
->>>>>>> 52a397925e2df089c40dad893d35531ad2a76d73
 
             
 
