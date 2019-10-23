@@ -42,11 +42,11 @@ if __name__ == "__main__":
         G = 0.0
         W = 1.0
         for state, action, reward in episode:
+            if action == 0 or action == 3:
+                break
             G += reward
             C[state] += W
             V[state] += W / C[state] * (G - V[state])
-            if action == 0 or action == 3:
-                break
             W *= 0.5 / 0.25
 
             
