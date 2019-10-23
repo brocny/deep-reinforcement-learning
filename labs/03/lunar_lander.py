@@ -32,6 +32,9 @@ def progress_log(Q, progress):
             state, reward, done, _ = env.step(action)       
 
 
+
+
+
 if __name__ == "__main__":
     # Fix random seed
     np.random.seed(42)
@@ -40,7 +43,7 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--episodes", default=500, type=int, help="Training episodes.")
-    parser.add_argument("--from_expert_episodes", default=500, type=int, help="Learn from expert episodes.")
+    parser.add_argument("--from_expert_episodes", default=10000, type=int, help="Learn from expert episodes.")
     parser.add_argument("--render_each", default=0, type=int, help="Render some episodes.")
 
     parser.add_argument("--alpha", default=0.05, type=float, help="Learning rate.")
@@ -59,9 +62,7 @@ if __name__ == "__main__":
     #
     # The overall structure of the code follows.
     Q = np.zeros([env.states, env.actions])
-
-    alpha_scheduler = ExpDecay(args.alpha, args.alpha_final, args.episodes)
-    epsilon_scheduler = ExpDecay(args.epsilon, args.epsilon_final, args.episodes)
+    alpha_scheduler = ExpDecay(args.alpha, args.alpha_final, args.from_expert_episodes)
 
     print('Learning from expert')
     # learn from expert
