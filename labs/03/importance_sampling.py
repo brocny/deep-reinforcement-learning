@@ -44,7 +44,6 @@ if __name__ == "__main__":
             G += reward
             C[state] += W
             V[state] += W / C[state] * (G - V[state])
-            # action cannot happen in target policy
             if action == 0 or action == 3:
                 break
             W *= 2 # 0.5  /0.25
