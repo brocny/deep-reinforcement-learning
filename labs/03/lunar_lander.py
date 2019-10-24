@@ -5,6 +5,8 @@ import lunar_lander_evaluator
 
 import math
 
+import pickle
+
 class ExpDecay:
     def __init__(self, initial, final, epochs):
         self.initial = initial
@@ -42,8 +44,8 @@ if __name__ == "__main__":
     # Parse arguments
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--episodes", default=500, type=int, help="Training episodes.")
-    parser.add_argument("--from_expert_episodes", default=10000, type=int, help="Learn from expert episodes.")
+    parser.add_argument("--exploring_episodes", default=10000, type=int, help="Training episodes.")
+    parser.add_argument("--from_expert_episodes", default=15000, type=int, help="Learn from expert episodes.")
     parser.add_argument("--render_each", default=0, type=int, help="Render some episodes.")
 
     parser.add_argument("--alpha", default=0.05, type=float, help="Learning rate.")
@@ -62,7 +64,12 @@ if __name__ == "__main__":
     #
     # The overall structure of the code follows.
     Q = np.zeros([env.states, env.actions])
-    alpha_scheduler = ExpDecay(args.alpha, args.alpha_final, args.from_expert_episodes)
+
+
+    alpha_scheduler = ExpDecay(args.alpha, args.alpha_final, args.exploring_episodes + args.from_expert_episodes)
+    epsilon_scheduler = ExpDecay(args.epsilon, args.epsilon_final, args.exploring_episodes)
+
+    
 
     print('Learning from expert')
     # learn from expert
@@ -77,7 +84,22 @@ if __name__ == "__main__":
             state = new_state
 
 
+    print('Exploring')
+    for episode in range(args.exploring_episodes):
+        if episode % (args.exploring_episodes / 10) == 0:
+            progress_log(Q, episode / args.exploring_episodes * 100)
+        state, done = env.reset(), False
+        epsilon = epsilon_scheduler.get()
+        alpha = alpha_scheduler.get()
+        while not done:
+            action = Q[state].argmax() if np.random.uniform() > epsilon else np.random.randint(env.actions)
+            next_state, reward, done, _ = env.step(action)
+            Q[state, action] += alpha * (reward + args.gamma * Q[next_state].max() - Q[state, action])
+            state = next_state 
 
+
+
+    np.savetxt('test1.txt', Q)
 
 
     # Perform last 100 evaluation episodes
@@ -86,3 +108,5 @@ if __name__ == "__main__":
         while not done:
             action = np.argmax(Q[state])
             state, reward, done, _ = env.step(action)
+
+
