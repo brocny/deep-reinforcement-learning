@@ -51,7 +51,6 @@ if __name__ == "__main__":
     # The overall structure of the code follows.
     Q = np.zeros([env.states, env.actions])
 
-
     alpha_scheduler = ExpDecay(args.alpha, args.alpha_final, args.episodes)
     epsilon_scheduler = ExpDecay(args.epsilon, args.epsilon_final, args.episodes)
 
@@ -68,11 +67,6 @@ if __name__ == "__main__":
             next_state, reward, done, _ = env.step(action)
             Q[state, action] += alpha * (reward + args.gamma * Q[next_state].max() - Q[state, action])
             state = next_state 
-
-
-
-    
-
 
     # Perform last 100 evaluation episodes
     while True:

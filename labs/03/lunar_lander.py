@@ -36,7 +36,7 @@ def progress_log(Q, progress):
             state, reward, done, _ = env.step(action)       
 
 
-def actions_distrituction(state):
+def action_distribution(state):
     minn = state.min()
     normalized_state = [s_a - minn for s_a in state]
     summ = sum(normalized_state)
@@ -45,14 +45,12 @@ def actions_distrituction(state):
     return np.array([s_a / summ for s_a in normalized_state])
 
 
-
-def Q_learning(state):
+def q_learning(state):
     return state.max()
 
 
-
-def Expected_sarsa(state):
-    return np.dot(actions_distrituction(state), state)
+def expected_sarsa(state):
+    return np.dot(action_distribution(state), state)
 
 
 if __name__ == "__main__":
@@ -84,7 +82,7 @@ if __name__ == "__main__":
     #
     # The overall structure of the code follows.
 
-    if not args.model == "":
+    if args.model != '':
         Q = np.loadtxt(args.model)
     else:
         Q = np.zeros([env.states, env.actions])
@@ -103,7 +101,6 @@ if __name__ == "__main__":
                 Q[state, action] += alpha * (reward + args.gamma * Q[new_state].max() - Q[state, action])
                 state = new_state
 
-
         print('Exploring')
         for episode in range(args.exploring_episodes):
             if episode % (args.exploring_episodes / 10) == 0:
@@ -120,7 +117,6 @@ if __name__ == "__main__":
                 Q[state, action] += alpha * (reward + args.gamma * Q[next_state].max() - Q[state, action])
                 state = next_state 
         #np.savetxt('model.py', Q)
-
 
     # Perform last 100 evaluation episodes
     while True:
