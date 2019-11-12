@@ -36,8 +36,8 @@ if __name__ == "__main__":
     parser.add_argument("--episodes", default=7500, type=int, help="Training episodes.")
     parser.add_argument("--render_each", default=0, type=int, help="Render some episodes.")
 
-    parser.add_argument("--alpha", default=0.05, type=float, help="Learning rate.")
-    parser.add_argument("--alpha_final", default=0.005, type=float, help="Final learning rate.")
+    parser.add_argument("--alpha", default=0.5, type=float, help="Learning rate.")
+    parser.add_argument("--alpha_final", default=0.01, type=float, help="Final learning rate.")
     parser.add_argument("--epsilon", default=0.4, type=float, help="Exploration factor.")
     parser.add_argument("--epsilon_final", default=0.05, type=float, help="Final exploration factor.")
     parser.add_argument("--gamma", default=0.98, type=float, help="Discounting factor.")
