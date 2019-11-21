@@ -25,7 +25,7 @@ if __name__ == "__main__":
     # Parse arguments
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--episodes", default=4500, type=int, help="Training episodes.")
+    parser.add_argument("--episodes", default=4300, type=int, help="Training episodes.")
     parser.add_argument("--render_each", default=None, type=int, help="Render some episodes.")
 
     parser.add_argument("--alpha", default=0.8, type=float, help="Learning rate.")
