@@ -3,6 +3,8 @@
 
 #!/usr/bin/env python3
 import numpy as np
+import os
+import time
 import tensorflow as tf
 
 import cart_pole_pixels_evaluator
@@ -13,24 +15,25 @@ class Network:
         #
         # Use Adam optimizer with given `args.learning_rate`.
 
-        inp = tf.keras.layers.Input(env.state_shape)
+        self.model = tf.keras.Sequential([
+            tf.keras.layers.Conv2D(20, 5, strides = 2, input_shape = env.state_shape, activation = tf.nn.relu),
+            tf.keras.layers.MaxPool2D((2, 2)),
+            tf.keras.layers.Conv2D(80, 3, strides = 1, input_shape = env.state_shape, activation = tf.nn.relu),
+            tf.keras.layers.MaxPool2D((2, 2)),
+            tf.keras.layers.Flatten(),
+            tf.keras.layers.Dense(50, activation = tf.nn.relu),
+            tf.keras.layers.Dense(env.actions, activation = tf.nn.softmax)
+        ])
 
-        hidden = tf.keras.layers.Conv2D(32, 5, strides=2, activation = tf.nn.relu)(inp)
-        hidden = tf.keras.layers.MaxPool2D()(hidden)
-        
-        hidden = tf.keras.layers.Conv2D(64, 3, strides=1, activation = tf.nn.relu)(hidden)
-        hidden = tf.keras.layers.MaxPool2D()(hidden)
-
-        hidden = tf.keras.layers.Flatten()(hidden)
-        
-        hidden_m = tf.keras.layers.Dense(60, activation=tf.nn.relu)(hidden)
-        out_m = tf.keras.layers.Dense(env.actions, activation=tf.nn.softmax)(hidden_m)
-
-        hidden_b = tf.keras.layers.Dense(60, activation=tf.nn.relu)(hidden)
-        out_b = tf.keras.layers.Dense(1, activation=None)(hidden_b)
-
-        self.model = tf.keras.Model(inp, out_m)
-        self.baseline = tf.keras.Model(inp, out_b)
+        self.baseline = tf.keras.Sequential([
+            tf.keras.layers.Conv2D(20, 5, strides = 2, input_shape = env.state_shape, activation = tf.nn.relu),
+            tf.keras.layers.MaxPool2D((2, 2)),
+            tf.keras.layers.Conv2D(80, 3, strides = 1, input_shape = env.state_shape, activation = tf.nn.relu),
+            tf.keras.layers.MaxPool2D((2, 2)),
+            tf.keras.layers.Flatten(),
+            tf.keras.layers.Dense(50, activation = tf.nn.relu),
+            tf.keras.layers.Dense(1, activation = None)
+        ])
 
         self.model.compile(
             optimizer = tf.optimizers.Adam(args.learning_rate), 
@@ -45,7 +48,7 @@ class Network:
         )
 
     def train(self, states, actions, returns):
-        states, actions, returns = np.array(states), np.array(actions), np.array(returns)
+        states, actions, returns = np.array(states, np.float32), np.array(actions, np.int32), np.array(returns, np.float32)
         # TODO: Train the model using the states, actions and observed returns.
         predicted_baseline = self.baseline.predict_on_batch(states)
         predicted_baseline = np.reshape(predicted_baseline, returns.shape)
@@ -64,10 +67,11 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--batch_size", default=4, type=int, help="Number of episodes to train on.")
-    parser.add_argument("--episodes", default=1000, type=int, help="Training episodes.")
-    parser.add_argument("--learning_rate", default=0.0002, type=float, help="Learning rate.")
+    parser.add_argument("--episodes", default=850, type=int, help="Training episodes.")
+    parser.add_argument("--learning_rate", default=0.0005, type=float, help="Learning rate.")
     parser.add_argument("--render_each", default=0, type=int, help="Render some episodes.")
     parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
+    parser.add_argument("--load_model", default=True, action="store_true")
     args = parser.parse_args()
 
     # Fix random seed
@@ -81,6 +85,14 @@ if __name__ == "__main__":
 
     # Construct the network
     network = Network(env, args)
+    if os.path.exists('embedded_data.py'):
+        import embedded_data
+
+    if os.path.exists('model.h5') and os.path.exists('baseline.h5'):
+        network.model = tf.keras.models.load_model('model.h5')
+        network.baseline = tf.keras.models.load_model('baseline.h5')
+        print('Loaded pre-trained model.')
+        args.episodes = 0   
 
     # Training
     for _ in range(args.episodes // args.batch_size):
@@ -117,6 +129,12 @@ if __name__ == "__main__":
             batch_returns += returns
 
         network.train(batch_states, batch_actions, batch_returns)
+    print('Starting final evaluation.')
+
+    if not args.load_model:
+        network.model.save(f'model-{time.strftime("%d-%m-%H:%M")}.h5')
+        network.baseline.save(f'baseline-{time.strftime("%d-%m-%H:%M")}.h5')
+        print('Saved trained model')
 
     # Final evaluation
     while True:
