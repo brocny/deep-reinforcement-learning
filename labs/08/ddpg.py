@@ -27,10 +27,10 @@ class Network:
         inp = tf.keras.layers.Input(env.state_shape)
 
         hidden = tf.keras.layers.Dense(400, activation=tf.nn.relu)(inp)
-        #hidden = tf.keras.layers.BatchNormalization()(hidden)
+        hidden = tf.keras.layers.BatchNormalization()(hidden)
 
         hidden = tf.keras.layers.Dense(300, activation=tf.nn.relu)(hidden)
-        #hidden = tf.keras.layers.BatchNormalization()(hidden)
+        hidden = tf.keras.layers.BatchNormalization()(hidden)
 
         hidden = tf.keras.layers.Dense(action_components, activation=tf.nn.sigmoid)(hidden)
         out_actor = tf.add(action_lows, tf.multiply(hidden, action_highs - action_lows))
@@ -48,14 +48,14 @@ class Network:
         action_inp = tf.keras.layers.Input(env.action_shape)
 
         hidden = tf.keras.layers.Dense(300, activation=tf.nn.relu)(inp)
-        #hidden = tf.keras.layers.BatchNormalization()(hidden)
+        hidden = tf.keras.layers.BatchNormalization()(hidden)
 
         hidden = tf.keras.layers.Concatenate()([action_inp, hidden])
         hidden = tf.keras.layers.Dense(400, activation=tf.nn.relu)(hidden)
-        #hidden = tf.keras.layers.BatchNormalization()(hidden)
+        hidden = tf.keras.layers.BatchNormalization()(hidden)
 
         hidden = tf.keras.layers.Dense(300, activation=tf.nn.relu)(hidden)
-        #hidden = tf.keras.layers.BatchNormalization()(hidden)
+        hidden = tf.keras.layers.BatchNormalization()(hidden)
 
         critic_out = tf.keras.layers.Dense(1, activation=None)(hidden)
 
