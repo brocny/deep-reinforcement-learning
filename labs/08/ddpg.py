@@ -27,7 +27,11 @@ class Network:
         inp = tf.keras.layers.Input(env.state_shape)
 
         hidden = tf.keras.layers.Dense(80, activation=tf.nn.relu)(inp)
+        hidden = tf.keras.layers.BatchNormalization()(hidden)
+
         hidden = tf.keras.layers.Dense(80, activation=tf.nn.relu)(hidden)
+        hidden = tf.keras.layers.BatchNormalization()(hidden)
+
         hidden = tf.keras.layers.Dense(action_components, activation=tf.nn.sigmoid)(hidden)
         out_actor = tf.add(action_lows, tf.multiply(hidden, action_highs - action_lows))
 
@@ -43,10 +47,16 @@ class Network:
         
         action_inp = tf.keras.layers.Input(env.action_shape)
 
-        hidden = tf.keras.layers.Dense(100, activation=tf.nn.relu)(inp)        
+        hidden = tf.keras.layers.Dense(100, activation=tf.nn.relu)(inp)
+        hidden = tf.keras.layers.BatchNormalization()(hidden)
+
         hidden = tf.keras.layers.Concatenate()([action_inp, hidden])
         hidden = tf.keras.layers.Dense(200, activation=tf.nn.relu)(hidden)
+        hidden = tf.keras.layers.BatchNormalization()(hidden)
+
         hidden = tf.keras.layers.Dense(200, activation=tf.nn.relu)(hidden)
+        hidden = tf.keras.layers.BatchNormalization()(hidden)
+
         critic_out = tf.keras.layers.Dense(1, activation=None)(hidden)
 
         self.critic_model = tf.keras.Model(inputs=[inp, action_inp], outputs=critic_out)
@@ -195,8 +205,8 @@ if __name__ == "__main__":
                 action = network.predict_actions([state])[0]
                 state, reward, done, _ = env.step(action)
                 returns[-1] += reward
-        print("Evaluation of {} episodes: {}".format(args.evaluate_for, np.mean(returns)))
-        if np.mean(returns) > -185:
+        print("Evaluation of {} episodes: {}".format(args.evaluate_for, np.mean(returns)), flush=True)
+        if np.mean(returns) - np.std(returns) > -190:
             network.actor_model.save(f'actor-{time.strftime("%d-%m-%H:%M")}.h5')
             network.critic_model.save(f'critic-{time.strftime("%d-%m-%H:%M")}.h5')
             print('Saved trained model')
