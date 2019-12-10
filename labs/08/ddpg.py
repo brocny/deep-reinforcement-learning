@@ -26,11 +26,11 @@ class Network:
         # `tf.keras.models.clone_model`.
         inp = tf.keras.layers.Input(env.state_shape)
 
-        hidden = tf.keras.layers.Dense(400, activation=tf.nn.relu)(inp)
-        hidden = tf.keras.layers.BatchNormalization()(hidden)
+        hidden = tf.keras.layers.BatchNormalization()(inp)
+        hidden = tf.keras.layers.Dense(400, activation=tf.nn.relu)(hidden)
 
-        hidden = tf.keras.layers.Dense(300, activation=tf.nn.relu)(hidden)
         hidden = tf.keras.layers.BatchNormalization()(hidden)
+        hidden = tf.keras.layers.Dense(300, activation=tf.nn.relu)(hidden)
 
         hidden = tf.keras.layers.Dense(action_components, activation=tf.nn.sigmoid)(hidden)
         out_actor = tf.add(action_lows, tf.multiply(hidden, action_highs - action_lows))
@@ -47,15 +47,17 @@ class Network:
         
         action_inp = tf.keras.layers.Input(env.action_shape)
 
-        hidden = tf.keras.layers.Dense(300, activation=tf.nn.relu)(inp)
-        hidden = tf.keras.layers.BatchNormalization()(hidden)
+        l2 = tf.keras.regularizers.l2(5e-3)
 
-        hidden = tf.keras.layers.Concatenate()([action_inp, hidden])
-        hidden = tf.keras.layers.Dense(400, activation=tf.nn.relu)(hidden)
-        hidden = tf.keras.layers.BatchNormalization()(hidden)
+        hidden_a = tf.keras.layers.Dense(300, activation=tf.nn.relu, kernel_regularizer=l2)(action_inp)
 
-        hidden = tf.keras.layers.Dense(300, activation=tf.nn.relu)(hidden)
-        hidden = tf.keras.layers.BatchNormalization()(hidden)
+        hidden_s = tf.keras.layers.BatchNormalization()(inp)
+        hidden_s = tf.keras.layers.Dense(400, activation=tf.nn.relu, kernel_regularizer=l2)(hidden_s)
+
+        hidden_s = tf.keras.layers.BatchNormalization()(hidden_s)
+        hidden_s = tf.keras.layers.Dense(300, activation=tf.nn.relu, kernel_regularizer=l2)(hidden_s)
+        
+        hidden = tf.keras.layers.Concatenate()([hidden_s, hidden_a])
 
         critic_out = tf.keras.layers.Dense(1, activation=None)(hidden)
 
@@ -85,7 +87,6 @@ class Network:
             target_Q = returns + values * (1 - dones) * self.gamma
             target_Q = tf.stop_gradient(target_Q)
             current_Q = self.critic_model([states, actions])
-            td_errors = target_Q - current_Q
             critic_loss = tf.losses.mse(target_Q, current_Q)
         
         critic_grad = tape.gradient(critic_loss, self.critic_model.trainable_variables)
