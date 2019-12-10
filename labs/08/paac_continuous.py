@@ -83,11 +83,19 @@ class Network:
         # - mean square error of the `returns` and `values
         with tf.GradientTape() as tape:
             tape.watch(self._model.trainable_variables)
-            mus, sds, values = self._model(states)
+            mus, sds, values = self._model(states, training = True)
+            mus = mus[:, 0]
+            sds = sds[:, 0]
+            values = values[:, 0]
             action_distribution = Normal(mus, sds)
-            loss_1 = - action_distribution.log_prob(tf.reduce_sum(actions, axis = 1)) * returns 
+            loss_1 = - tf.reduce_sum(action_distribution.log_prob(actions), axis = 1) * (returns - tf.stop_gradient(values))
+            loss_1 = tf.reduce_mean(loss_1)
+            #print(loss_1.shape)
             loss_2 = - args.entropy_regularization * action_distribution.entropy()
-            loss_3 = tf.keras.losses.MSE(returns, values)
+            loss_2 = tf.reduce_mean(loss_2)
+            #print(loss_2.shape)
+            loss_3 = tf.losses.mse(returns, values)
+            #print(loss_3.shape)
             loss = loss_1 + loss_2 + loss_3
         grads = tape.gradient(loss, self._model.trainable_variables)
         self._optimizer.apply_gradients(zip(grads, self._model.trainable_variables))
@@ -121,16 +129,16 @@ if __name__ == "__main__":
     # Parse arguments
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--entropy_regularization", default=0.1, type=float, help="Entropy regularization weight.")
+    parser.add_argument("--entropy_regularization", default=0.2, type=float, help="Entropy regularization weight.")
     parser.add_argument("--evaluate_each", default=100, type=int, help="Evaluate each number of batches.")
-    parser.add_argument("--evaluate_for", default=10, type=int, help="Evaluate for number of batches.")
-    parser.add_argument("--gamma", default=None, type=float, help="Discounting factor.")
-    parser.add_argument("--hidden_layer", default=20, type=int, help="Size of hidden layer.")
-    parser.add_argument("--learning_rate", default=None, type=float, help="Learning rate.")
+    parser.add_argument("--evaluate_for", default=100, type=int, help="Evaluate for number of batches.")
+    parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
+    parser.add_argument("--hidden_layer", default=10, type=int, help="Size of hidden layer.")
+    parser.add_argument("--learning_rate", default=0.01, type=float, help="Learning rate.")
     parser.add_argument("--render_each", default=0, type=int, help="Render some episodes.")
     parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
     parser.add_argument("--tiles", default=8, type=int, help="Tiles to use.")
-    parser.add_argument("--workers", default=1, type=int, help="Number of parallel workers.")
+    parser.add_argument("--workers", default=4, type=int, help="Number of parallel workers.")
     args = parser.parse_args()
 
     # Fix random seeds and number of threads
@@ -144,7 +152,7 @@ if __name__ == "__main__":
     action_lows, action_highs = env.action_ranges
 
     # Construct the network
-    #network = Network(env, args)
+    network = Network(env, args)
     # Initialize parallel workers by env.parallel_init
     states = env.parallel_init(args.workers)
     while True:
@@ -153,15 +161,11 @@ if __name__ == "__main__":
             # TODO: Choose actions using network.predict_actions.
             # using np.random.normal to sample action and np.clip
             # to clip it using action_lows and action_highs,
-            # mus, sds = network.predict_actions(states)
-            # actions = [min(action_highs, max(action_lows, a[0])) for a in np.random.normal(mus, sds)]
-            # print(action_lows)
-            # print(action_highs)
-            # print(actions)
+            mus, sds = network.predict_actions(states)
+            actions = np.clip(np.random.normal(mus, sds), action_lows, action_highs)
             
             # TODO: Perform steps by env.parallel_step
-            steps = env.parallel_step([0.0])
-            exit()
+            steps = env.parallel_step(actions)
             
             # TODO: Compute return estimates by
             # - extracting next_states from steps
@@ -173,7 +177,7 @@ if __name__ == "__main__":
                 for step, next_state_value in zip(steps, next_states_value)] 
 
             # TODO: Train network using current states, chosen actions and estimated returns
-            #network.train(states, actions, returns)
+            network.train(states, actions, returns)
             states = next_states
 
         # Periodic evaluation
@@ -190,4 +194,19 @@ if __name__ == "__main__":
                 returns[-1] += reward
         print("Evaluation of {} episodes: {}".format(args.evaluate_for, np.mean(returns)))
 
+        if np.mean(returns) > 90:
+            break
+
     # On the end perform final evaluations with `env.reset(True)`
+    returns = []
+    for _ in range(args.evaluate_for):
+        returns.append(0)
+        state, done = env.reset(True), False
+        while not done:
+            if args.render_each and env.episode > 0 and env.episode % args.render_each == 0:
+                env.render()
+
+            action = network.predict_actions([state])[0][0]
+            state, reward, done, _ = env.step(action)
+            returns[-1] += reward
+    print("Evaluation of {} episodes: {}".format(args.evaluate_for, np.mean(returns)))
