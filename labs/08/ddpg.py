@@ -26,11 +26,11 @@ class Network:
         # `tf.keras.models.clone_model`.
         inp = tf.keras.layers.Input(env.state_shape)
 
-        hidden = tf.keras.layers.Dense(30, activation=tf.nn.relu)(inp)
-        #hidden = tf.keras.layers.BatchNormalization()(hidden)
+        hidden = tf.keras.layers.Dense(400, activation=tf.nn.relu)(inp)
+        hidden = tf.keras.layers.BatchNormalization()(hidden)
 
-        hidden = tf.keras.layers.Dense(30, activation=tf.nn.relu)(hidden)
-        #hidden = tf.keras.layers.BatchNormalization()(hidden)
+        hidden = tf.keras.layers.Dense(300, activation=tf.nn.relu)(hidden)
+        hidden = tf.keras.layers.BatchNormalization()(hidden)
 
         hidden = tf.keras.layers.Dense(action_components, activation=tf.nn.sigmoid)(hidden)
         out_actor = tf.add(action_lows, tf.multiply(hidden, action_highs - action_lows))
@@ -47,22 +47,22 @@ class Network:
         
         action_inp = tf.keras.layers.Input(env.action_shape)
 
-        hidden = tf.keras.layers.Dense(30, activation=tf.nn.relu)(inp)
-        #hidden = tf.keras.layers.BatchNormalization()(hidden)
+        hidden = tf.keras.layers.Dense(300, activation=tf.nn.relu)(inp)
+        hidden = tf.keras.layers.BatchNormalization()(hidden)
 
         hidden = tf.keras.layers.Concatenate()([action_inp, hidden])
-        hidden = tf.keras.layers.Dense(30, activation=tf.nn.relu)(hidden)
-        #hidden = tf.keras.layers.BatchNormalization()(hidden)
+        hidden = tf.keras.layers.Dense(400, activation=tf.nn.relu)(hidden)
+        hidden = tf.keras.layers.BatchNormalization()(hidden)
 
-        hidden = tf.keras.layers.Dense(30, activation=tf.nn.relu)(hidden)
-        #hidden = tf.keras.layers.BatchNormalization()(hidden)
+        hidden = tf.keras.layers.Dense(300, activation=tf.nn.relu)(hidden)
+        hidden = tf.keras.layers.BatchNormalization()(hidden)
 
         critic_out = tf.keras.layers.Dense(1, activation=None)(hidden)
 
         self.critic_model = tf.keras.Model(inputs=[inp, action_inp], outputs=critic_out)
         self.critic_target = tf.keras.models.clone_model(self.critic_model)
 
-        self.actor_optimizer = tf.optimizers.Adam(args.learning_rate)
+        self.actor_optimizer = tf.optimizers.Adam(10 * args.learning_rate)
         self.critic_optimizer = tf.optimizers.Adam(args.learning_rate)
 
     @tf.function
@@ -77,6 +77,7 @@ class Network:
             a = self._predict_actions(states)
             actor_loss = -tf.reduce_mean(self.critic_model([states, a]))
         actor_grad = tape.gradient(actor_loss, self.actor_model.trainable_variables)
+        self.actor_optimizer.apply_gradients(zip(actor_grad, self.actor_model.trainable_variables))
 
         # Critic training 
         with tf.GradientTape() as tape:
@@ -85,9 +86,10 @@ class Network:
             target_Q = tf.stop_gradient(target_Q)
             current_Q = self.critic_model([states, actions])
             td_errors = target_Q - current_Q
+            critic_loss = tf.losses.mse(target_Q, current_Q)
         
-        critic_loss = tf.losses.mse(target_Q, current_Q)
         critic_grad = tape.gradient(critic_loss, self.critic_model.trainable_variables)
+        self.critic_optimizer.apply_gradients(zip(critic_grad, self.critic_model.trainable_variables))
         
     def train(self, states, actions, returns, next_states, dones):
         states, actions, returns = np.array(states, np.float32), np.array(actions, np.float32), np.array(returns, np.float32)
@@ -139,15 +141,15 @@ if __name__ == "__main__":
     # Parse arguments
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--batch_size", default=256, type=int, help="Batch size.")
+    parser.add_argument("--batch_size", default=64, type=int, help="Batch size.")
     parser.add_argument("--env", default="Pendulum-v0", type=str, help="Environment.")
     parser.add_argument("--evaluate_each", default=50, type=int, help="Evaluate each number of episodes.")
     parser.add_argument("--evaluate_for", default=10, type=int, help="Evaluate for number of batches.")
-    parser.add_argument("--noise_sigma", default=0.2, type=float, help="UB noise sigma.")
+    parser.add_argument("--noise_sigma", default=0.25, type=float, help="UB noise sigma.")
     parser.add_argument("--noise_theta", default=0.15, type=float, help="UB noise theta.")
-    parser.add_argument("--gamma", default=0.98, type=float, help="Discounting factor.")
+    parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
     parser.add_argument("--hidden_layer", default=None, type=int, help="Size of hidden layer.")
-    parser.add_argument("--learning_rate", default=1e-3, type=float, help="Learning rate.")
+    parser.add_argument("--learning_rate", default=1e-4, type=float, help="Learning rate.")
     parser.add_argument("--render_each", default=0, type=int, help="Render some episodes.")
     parser.add_argument("--target_tau", default=0.001, type=float, help="Target network update weight.")
     parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
