@@ -53,11 +53,9 @@ class Network:
 
         hidden_s = tf.keras.layers.BatchNormalization()(inp)
         hidden_s = tf.keras.layers.Dense(400, activation=tf.nn.relu, kernel_regularizer=l2)(hidden_s)
-
-        hidden_s = tf.keras.layers.BatchNormalization()(hidden_s)
-        hidden_s = tf.keras.layers.Dense(300, activation=tf.nn.relu, kernel_regularizer=l2)(hidden_s)
         
         hidden = tf.keras.layers.Concatenate()([hidden_s, hidden_a])
+        hidden = tf.keras.layers.Dense(300, activation=tf.nn.relu)(hidden)
 
         critic_out = tf.keras.layers.Dense(1, activation=None)(hidden)
 
