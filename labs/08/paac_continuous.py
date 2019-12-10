@@ -1,3 +1,6 @@
+# dd7e3410-38c0-11e8-9b58-00505601122b
+# 6e14ef6b-3281-11e8-9de3-00505601122b
+
 #!/usr/bin/env python3
 import numpy as np
 import tensorflow as tf
@@ -29,8 +32,8 @@ class Network:
     def __init__(self, env, args):
         assert len(env.action_shape) == 1
         action_components = env.action_shape[0]
-
         self.entropy_regularization = args.entropy_regularization
+        self.weights = env.weights
 
         # TODO: Create `_model`, which: processes `states`. Because `states` are
         # vectors of tile indices, you need to convert them to one-hot-like
@@ -49,8 +52,18 @@ class Network:
         # The model also computes `values`, starting with `states` and
         # - add a fully connected layer of size args.hidden_layer and ReLU activation
         # - add a fully connected layer with 1 output and no activation
+        inputs = tf.keras.Input(shape = (args.workers, env.weights))
 
-        self._model = tf.keras.Model(inputs=inputs, outputs=[mus, sds, values])
+        mus = tf.keras.layers.Dense(args.hidden_layer, activation=tf.nn.relu)(inputs)
+        mus = tf.keras.layers.Dense(action_components, activation=tf.nn.tanh)(mus)
+
+        sds = tf.keras.layers.Dense(args.hidden_layer, activation=tf.nn.relu)(inputs)
+        sds = tf.keras.layers.Dense(action_components, activation=tf.nn.softplus)(sds)
+
+        values = tf.keras.layers.Dense(args.hidden_layer, activation=tf.nn.relu)(inputs)
+        values = tf.keras.layers.Dense(1)(values)
+
+        self._model = tf.keras.Model(inputs = inputs, outputs = [mus, sds, values])
         self._optimizer = tf.optimizers.Adam(args.learning_rate)
 
     @tf.function
@@ -67,11 +80,21 @@ class Network:
         #   and compute its mean.
         # - negative value of the distribution entropy (use `entropy` method of
         #   the `action_distribution`) weighted by `args.entropy_regularization`.
-        # - mean square error of the `returns` and `values`
+        # - mean square error of the `returns` and `values
+        with tf.GradientTape() as tape:
+            tape.watch(self._model.trainable_variables)
+            mus, sds, values = self._model(states)
+            action_distribution = Normal(mus, sds)
+            loss_1 = - action_distribution.log_prob(tf.reduce_sum(actions, axis = 1)) * returns 
+            loss_2 = - args.entropy_regularization * action_distribution.entropy()
+            loss_3 = tf.keras.losses.MSE(returns, values)
+            loss = loss_1 + loss_2 + loss_3
+        grads = tape.gradient(loss, self._model.trainable_variables)
+        self._optimizer.apply_gradients(zip(grads, self._model.trainable_variables))
 
     def train(self, states, actions, returns):
         states, actions, returns = np.array(states, np.int32), np.array(actions, np.float32), np.array(returns, np.float32)
-        self._train(states, actions, returns)
+        self._train(self._one_hot(states), actions, returns)
 
     @tf.function
     def _predict(self, states):
@@ -79,13 +102,20 @@ class Network:
 
     def predict_actions(self, states):
         states = np.array(states, np.int32)
-        mus, sds, _ = self._predict(states)
+        mus, sds, _ = self._predict(self._one_hot(states))
         return mus.numpy(), sds.numpy()
 
     def predict_values(self, states):
         states = np.array(states, np.int32)
-        _, _, values = self._predict(states)
+        _, _, values = self._predict(self._one_hot(states))
         return values.numpy()[:, 0]
+
+    def _one_hot(self, states):
+        one_hot = np.zeros(shape = (len(states), self.weights), dtype = 'float32')
+        for i, state in enumerate(states):
+            for tile in state:
+                one_hot[i][tile] = 1
+        return one_hot
 
 if __name__ == "__main__":
     # Parse arguments
@@ -95,7 +125,7 @@ if __name__ == "__main__":
     parser.add_argument("--evaluate_each", default=100, type=int, help="Evaluate each number of batches.")
     parser.add_argument("--evaluate_for", default=10, type=int, help="Evaluate for number of batches.")
     parser.add_argument("--gamma", default=None, type=float, help="Discounting factor.")
-    parser.add_argument("--hidden_layer", default=None, type=int, help="Size of hidden layer.")
+    parser.add_argument("--hidden_layer", default=20, type=int, help="Size of hidden layer.")
     parser.add_argument("--learning_rate", default=None, type=float, help="Learning rate.")
     parser.add_argument("--render_each", default=0, type=int, help="Render some episodes.")
     parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
@@ -114,8 +144,7 @@ if __name__ == "__main__":
     action_lows, action_highs = env.action_ranges
 
     # Construct the network
-    network = Network(env, args)
-
+    #network = Network(env, args)
     # Initialize parallel workers by env.parallel_init
     states = env.parallel_init(args.workers)
     while True:
@@ -124,15 +153,28 @@ if __name__ == "__main__":
             # TODO: Choose actions using network.predict_actions.
             # using np.random.normal to sample action and np.clip
             # to clip it using action_lows and action_highs,
-
+            # mus, sds = network.predict_actions(states)
+            # actions = [min(action_highs, max(action_lows, a[0])) for a in np.random.normal(mus, sds)]
+            # print(action_lows)
+            # print(action_highs)
+            # print(actions)
+            
             # TODO: Perform steps by env.parallel_step
-
+            steps = env.parallel_step([0.0])
+            exit()
+            
             # TODO: Compute return estimates by
             # - extracting next_states from steps
             # - computing value function approximation in next_states
             # - estimating returns by reward + (0 if done else args.gamma * next_state_value)
+            next_states = [step[0] for step in steps]
+            next_states_value = network.predict_values(next_states)
+            returns = [step[1] + (not step[2]) * (args.gamma * next_state_value) \
+                for step, next_state_value in zip(steps, next_states_value)] 
 
             # TODO: Train network using current states, chosen actions and estimated returns
+            #network.train(states, actions, returns)
+            states = next_states
 
         # Periodic evaluation
         returns = []
