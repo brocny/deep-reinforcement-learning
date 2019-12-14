@@ -1,4 +1,8 @@
 #!/usr/bin/env python3
+
+#dd7e3410-38c0-11e8-9b58-00505601122b
+#6e14ef6b-3281-11e8-9de3-00505601122b
+
 import collections
 
 import numpy as np
@@ -26,14 +30,14 @@ class Network:
         # `tf.keras.models.clone_model`.
         inp = tf.keras.layers.Input(env.state_shape)
 
-        hidden = tf.keras.layers.BatchNormalization()(inp)
-        hidden = tf.keras.layers.Dense(400, activation=tf.nn.relu)(hidden)
+        hidden = tf.keras.layers.Dense(30, activation=None)(inp)
+        hidden = tf.keras.layers.Activation(tf.nn.relu)(hidden)
 
-        hidden = tf.keras.layers.BatchNormalization()(hidden)
-        hidden = tf.keras.layers.Dense(300, activation=tf.nn.relu)(hidden)
+        hidden = tf.keras.layers.Dense(30, activation=None)(hidden)
+        hidden = tf.keras.layers.Activation(tf.nn.relu)(hidden)
 
-        hidden = tf.keras.layers.Dense(action_components, activation=tf.nn.sigmoid)(hidden)
-        out_actor = tf.add(action_lows, tf.multiply(hidden, action_highs - action_lows))
+        hidden = tf.keras.layers.Dense(action_components, activation=tf.nn.tanh)(hidden)
+        out_actor = tf.multiply(hidden, action_highs)
 
         self.actor_model = tf.keras.Model(inputs=inp, outputs=out_actor)
         self.actor_target = tf.keras.models.clone_model(self.actor_model)
@@ -44,25 +48,24 @@ class Network:
         # through two more hidden layers, before computing the returns.
         #
         # Then, create a target critic as a copy of the model using `tf.keras.models.clone_model`.
-        
+    
+        inp = tf.keras.layers.Input(env.state_shape)
         action_inp = tf.keras.layers.Input(env.action_shape)
 
-        l2 = tf.keras.regularizers.l2(5e-3)
+        hidden_s = tf.keras.layers.Dense(30, activation=tf.nn.relu)(inp)
+        hidden_s = tf.keras.layers.BatchNormalization()(hidden_s)
+        hidden_s = tf.keras.layers.Activation(tf.nn.relu)(hidden_s)
 
-        hidden_a = tf.keras.layers.Dense(300, activation=tf.nn.relu, kernel_regularizer=l2)(action_inp)
-
-        hidden_s = tf.keras.layers.BatchNormalization()(inp)
-        hidden_s = tf.keras.layers.Dense(400, activation=tf.nn.relu, kernel_regularizer=l2)(hidden_s)
-        
-        hidden = tf.keras.layers.Concatenate()([hidden_s, hidden_a])
-        hidden = tf.keras.layers.Dense(300, activation=tf.nn.relu)(hidden)
+        hidden = tf.keras.layers.Concatenate()([hidden_s, action_inp])
+        hidden = tf.keras.layers.Dense(30, activation=tf.nn.relu)(hidden)
+        hidden = tf.keras.layers.Dense(30, activation=tf.nn.relu)(hidden)
 
         critic_out = tf.keras.layers.Dense(1, activation=None)(hidden)
 
         self.critic_model = tf.keras.Model(inputs=[inp, action_inp], outputs=critic_out)
         self.critic_target = tf.keras.models.clone_model(self.critic_model)
 
-        self.actor_optimizer = tf.optimizers.Adam(10 * args.learning_rate)
+        self.actor_optimizer = tf.optimizers.Adam(args.learning_rate)
         self.critic_optimizer = tf.optimizers.Adam(args.learning_rate)
 
     @tf.function
@@ -74,19 +77,17 @@ class Network:
         
         # Actor training
         with tf.GradientTape() as tape:
-            a = self._predict_actions(states)
-            actor_loss = -tf.reduce_mean(self.critic_model([states, a]))
+            a = self.actor_model(states, training=True)
+            actor_loss = -self.critic_model([states, a], training=False)
         actor_grad = tape.gradient(actor_loss, self.actor_model.trainable_variables)
         self.actor_optimizer.apply_gradients(zip(actor_grad, self.actor_model.trainable_variables))
 
         # Critic training 
+        values = self._predict_values(next_states)[:, 0]
+        target_Q = returns + values * (1 - dones) * self.gamma
         with tf.GradientTape() as tape:
-            values = self._predict_values(next_states)
-            target_Q = returns + values * (1 - dones) * self.gamma
-            target_Q = tf.stop_gradient(target_Q)
-            current_Q = self.critic_model([states, actions])
+            current_Q = self.critic_model([states, actions], training=True)[:, 0]
             critic_loss = tf.losses.mse(target_Q, current_Q)
-        
         critic_grad = tape.gradient(critic_loss, self.critic_model.trainable_variables)
         self.critic_optimizer.apply_gradients(zip(critic_grad, self.critic_model.trainable_variables))
         
@@ -140,17 +141,17 @@ if __name__ == "__main__":
     # Parse arguments
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--batch_size", default=64, type=int, help="Batch size.")
+    parser.add_argument("--batch_size", default=256, type=int, help="Batch size.")
     parser.add_argument("--env", default="Pendulum-v0", type=str, help="Environment.")
     parser.add_argument("--evaluate_each", default=50, type=int, help="Evaluate each number of episodes.")
     parser.add_argument("--evaluate_for", default=10, type=int, help="Evaluate for number of batches.")
-    parser.add_argument("--noise_sigma", default=0.25, type=float, help="UB noise sigma.")
+    parser.add_argument("--noise_sigma", default=0.2, type=float, help="UB noise sigma.")
     parser.add_argument("--noise_theta", default=0.15, type=float, help="UB noise theta.")
     parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
     parser.add_argument("--hidden_layer", default=None, type=int, help="Size of hidden layer.")
-    parser.add_argument("--learning_rate", default=1e-4, type=float, help="Learning rate.")
+    parser.add_argument("--learning_rate", default=1e-3, type=float, help="Learning rate.")
     parser.add_argument("--render_each", default=0, type=int, help="Render some episodes.")
-    parser.add_argument("--target_tau", default=0.001, type=float, help="Target network update weight.")
+    parser.add_argument("--target_tau", default=0.01, type=float, help="Target network update weight.")
     parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
     args = parser.parse_args()
 
@@ -173,14 +174,14 @@ if __name__ == "__main__":
     Transition = collections.namedtuple("Transition", ["state", "action", "reward", "done", "next_state"])
 
     noise = OrnsteinUhlenbeckNoise(env.action_shape[0], 0., args.noise_theta, args.noise_sigma)
-    while True:
+    for _ in range(2):
         # Training
         for _ in range(args.evaluate_each):
             state, done = env.reset(), False
             noise.reset()
             while not done:
                 # TODO: Perform an action and store the transition in the replay buffer
-                action = tf.clip_by_value(network.predict_actions([state])[0] + noise.sample(), action_lows, action_highs)
+                action = np.clip(network.predict_actions([state])[0] + noise.sample(), action_lows, action_highs)
                 next_state, reward, done, _ = env.step(action)
                 replay_buffer.append(Transition(state, action, reward, done, next_state))
                 state = next_state
@@ -207,11 +208,11 @@ if __name__ == "__main__":
                 state, reward, done, _ = env.step(action)
                 returns[-1] += reward
         print("Evaluation of {} episodes: {}".format(args.evaluate_for, np.mean(returns)), flush=True)
-        if np.mean(returns) - np.std(returns) > -190:
-            network.actor_model.save(f'actor-{time.strftime("%d-%m-%H:%M")}.h5')
-            network.critic_model.save(f'critic-{time.strftime("%d-%m-%H:%M")}.h5')
-            print('Saved trained model')
-            break
+        # if np.mean(returns) - np.std(returns) > -190:
+        #     network.actor_model.save(f'actor-{time.strftime("%d-%m-%H:%M")}.h5')
+        #     network.critic_model.save(f'critic-{time.strftime("%d-%m-%H:%M")}.h5')
+        #     print('Saved trained model')
+        #     break
 
     # On the end perform final evaluations with `env.reset(True)`
     while True:
