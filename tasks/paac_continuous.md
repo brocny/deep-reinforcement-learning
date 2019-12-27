@@ -1,6 +1,6 @@
 ### Assignment: paac_continuous
 #### Date: Deadline: Dec 15, 23:59
-#### Points: 5 points
+#### Points: 6 points
 
 Using the [paac_continuous.py](https://github.com/ufal/npfl122/tree/master/labs/08/paac_continuous.py)
 template, solve the [MountainCarContinuous-v0 environment](https://gym.openai.com/envs/MountainCarContinuous-v0/)
@@ -17,3 +17,5 @@ Your goal is to reach an average return of 90 during 100 evaluation episodes.
 During evaluation in ReCodEx, two different random seeds will be employed, and
 you need to reach the required return on all of them. Time limit for each test
 is 10 minutes.
+
+**Note that you must not submit `gym_evaluator.py` nor `continuous_mountain_car_evaluator.py` to ReCodEx.**
