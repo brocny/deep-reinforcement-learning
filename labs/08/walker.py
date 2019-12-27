@@ -31,7 +31,7 @@ class Network:
         inp = tf.keras.layers.Input(env.state_shape)
 
         hidden = tf.keras.layers.Dense(args.hidden_layer, activation=None)(inp)
-        #hidden = tf.keras.layers.BatchNormalization()(hidden)
+        hidden = tf.keras.layers.BatchNormalization()(hidden)
         hidden = tf.keras.layers.Activation(tf.nn.relu)(hidden)
 
         hidden = tf.keras.layers.Dense(args.hidden_layer, activation=None)(hidden)
@@ -53,12 +53,15 @@ class Network:
         inp = tf.keras.layers.Input(env.state_shape)
         action_inp = tf.keras.layers.Input(env.action_shape)
 
-        hidden_s = tf.keras.layers.Dense(args.hidden_layer, activation=tf.nn.relu)(inp)
-        #hidden_s = tf.keras.layers.BatchNormalization()(hidden_s)
+        hidden_s = tf.keras.layers.Dense(args.hidden_layer, activation=None)(inp)
+        hidden_s = tf.keras.layers.BatchNormalization()(hidden_s)
         hidden_s = tf.keras.layers.Activation(tf.nn.relu)(hidden_s)
 
         hidden = tf.keras.layers.Concatenate()([hidden_s, action_inp])
-        hidden = tf.keras.layers.Dense(args.hidden_layer, activation=tf.nn.relu)(hidden)
+        hidden = tf.keras.layers.Dense(args.hidden_layer, activation=None)(hidden)
+        hidden = tf.keras.layers.BatchNormalization()(hidden)
+        hidden = tf.keras.layers.Activation(tf.nn.relu)(hidden)
+
         hidden = tf.keras.layers.Dense(args.hidden_layer, activation=tf.nn.relu)(hidden)
 
         critic_out = tf.keras.layers.Dense(1, activation=None)(hidden)
@@ -142,11 +145,11 @@ if __name__ == "__main__":
     # Parse arguments
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--batch_size", default=256, type=int, help="Batch size.")
+    parser.add_argument("--batch_size", default=512, type=int, help="Batch size.")
     parser.add_argument("--env", default="BipedalWalker-v2", type=str, help="Environment.")
     parser.add_argument("--evaluate_each", default=50, type=int, help="Evaluate each number of episodes.")
     parser.add_argument("--evaluate_for", default=10, type=int, help="Evaluate for number of batches.")
-    parser.add_argument("--noise_sigma", default=0.3, type=float, help="UB noise sigma.")
+    parser.add_argument("--noise_sigma", default=0.15, type=float, help="UB noise sigma.")
     parser.add_argument("--noise_theta", default=0.15, type=float, help="UB noise theta.")
     parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
     parser.add_argument("--hidden_layer", default=128, type=int, help="Size of hidden layers.")
