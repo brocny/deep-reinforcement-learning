@@ -144,7 +144,11 @@ class Network:
         # TODO: Predict actions by the target actor and evaluate them using
         # target_critic.
         actions = self.actor_target(states)
+<<<<<<< HEAD
         actions += tf.clip_by_value(tf.random.normal(self.action_components, stddev=self.action_noise), -self.action_clip, self.actions_clip)
+=======
+        actions += tf.clip_by_value(tf.random.normal(0, self.action_noise), -self.action_clip, self.actions_clip)
+>>>>>>> 3dcb46abd3b21b76207eb0b38bfb38a1671181cc
         actions = tf.clip_by_value(actions, self.action_lows, self.action_highs)
         return min(self.critic1_target([states, actions]), self.critic2_target([states, actions]))
 
@@ -186,7 +190,11 @@ if __name__ == "__main__":
     parser.add_argument("--action_noise_sigma", default=0.2, type=float, help="Action noise sigma.")
     parser.add_argument("--action_noise_clip", default=0.5, type=float, help="Action noise clipping.")
     parser.add_argument("--critic_lr", default=8e-4, type=float, help="Learning rate.")
+<<<<<<< HEAD
     parser.add_argument("--actor_lr", default=8e-4, type=float, help="Learning rate.")
+=======
+    parser.add_argument("--render_each", default=0, type=int, help="Render some episodes.")
+>>>>>>> 3dcb46abd3b21b76207eb0b38bfb38a1671181cc
     parser.add_argument("--target_tau", default=8e-3, type=float, help="Target network update weight.")
     parser.add_argument("--render_each", default=0, type=int, help="Render some episodes.")
     parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
