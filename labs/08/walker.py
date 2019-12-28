@@ -14,11 +14,19 @@ import gym_evaluator
 class Network:
     def __init__(self, env, args):
         assert len(env.action_shape) == 1
-        action_components = env.action_shape[0]
-        action_lows, action_highs = map(np.array, env.action_ranges)
+        self.action_components = env.action_shape[0]
+        self.action_lows, self.action_highs = map(np.array, env.action_ranges)
 
         self.tau = args.target_tau
         self.gamma = args.gamma
+    
+        self.i = 0
+        self.policy_delay = args.delay_update
+
+        self.action_noise = np.sqrt(args.action_noise_sigma)
+        self.action_clip = args.action_noise_clip
+
+        #l2 = tf.keras.regularizers.l2(1e-3)
 
         # TODO: Create `actor` network, starting with `inputs` and returning
         # `action_components` values for each batch example. Usually, one
@@ -35,10 +43,11 @@ class Network:
         hidden = tf.keras.layers.Activation(tf.nn.relu)(hidden)
 
         hidden = tf.keras.layers.Dense(args.hidden_layer, activation=None)(hidden)
+        hidden = tf.keras.layers.BatchNormalization()(hidden)
         hidden = tf.keras.layers.Activation(tf.nn.relu)(hidden)
 
-        hidden = tf.keras.layers.Dense(action_components, activation=tf.nn.tanh)(hidden)
-        out_actor = tf.multiply(hidden, action_highs)
+        hidden = tf.keras.layers.Dense(self.action_components, activation=tf.nn.tanh)(hidden)
+        out_actor = tf.multiply(hidden, self.action_highs)
 
         self.actor_model = tf.keras.Model(inputs=inp, outputs=out_actor)
         self.actor_target = tf.keras.models.clone_model(self.actor_model)
@@ -58,19 +67,26 @@ class Network:
         hidden_s = tf.keras.layers.Activation(tf.nn.relu)(hidden_s)
 
         hidden = tf.keras.layers.Concatenate()([hidden_s, action_inp])
+        
         hidden = tf.keras.layers.Dense(args.hidden_layer, activation=None)(hidden)
-        hidden = tf.keras.layers.BatchNormalization()(hidden)
+        #hidden = tf.keras.layers.BatchNormalization()(hidden)
         hidden = tf.keras.layers.Activation(tf.nn.relu)(hidden)
 
-        hidden = tf.keras.layers.Dense(args.hidden_layer, activation=tf.nn.relu)(hidden)
+        hidden = tf.keras.layers.Dense(args.hidden_layer, activation=None)(hidden)
+        #hidden = tf.keras.layers.BatchNormalization()(hidden)
+        hidden = tf.keras.layers.Activation(tf.nn.relu)(hidden)
 
         critic_out = tf.keras.layers.Dense(1, activation=None)(hidden)
 
-        self.critic_model = tf.keras.Model(inputs=[inp, action_inp], outputs=critic_out)
-        self.critic_target = tf.keras.models.clone_model(self.critic_model)
+        self.critic1_model = tf.keras.Model(inputs=[inp, action_inp], outputs=critic_out)
+        self.critic1_target = tf.keras.models.clone_model(self.critic1_model)
+
+        self.critic2_model = tf.keras.Model(inputs=[inp, action_inp], outputs=critic_out)
+        self.critic2_target = tf.keras.models.clone_model(self.critic2_model)
 
         self.actor_optimizer = tf.optimizers.Adam(args.actor_lr)
-        self.critic_optimizer = tf.optimizers.Adam(args.critic_lr)
+        self.critic1_optimizer = tf.optimizers.Adam(args.critic_lr)
+        self.critic2_optimizer = tf.optimizers.Adam(args.critic_lr)
 
     @tf.function
     def _train(self, states, actions, returns, next_states, dones):
@@ -79,29 +95,40 @@ class Network:
         # Furthermore, update the weights of the target actor and critic networks
         # by using args.target_tau option.
         
+        self.i += 1
         # Actor training
-        with tf.GradientTape() as tape:
-            a = self.actor_model(states, training=True)
-            actor_loss = -self.critic_model([states, a], training=False)
-        actor_grad = tape.gradient(actor_loss, self.actor_model.trainable_variables)
-        self.actor_optimizer.apply_gradients(zip(actor_grad, self.actor_model.trainable_variables))
+        if self.i % self.policy_delay == 0:
+            with tf.GradientTape() as tape:
+                a = self.actor_model(states, training=True)
+                actor_loss = -self.critic1_model([states, a], training=False)
+            actor_grad = tape.gradient(actor_loss, self.actor_model.trainable_variables)
+            self.actor_optimizer.apply_gradients(zip(actor_grad, self.actor_model.trainable_variables))
 
-        # Critic training 
+        # Critics training
         values = self._predict_values(next_states)[:, 0]
         target_Q = returns + values * (1 - dones) * self.gamma
         with tf.GradientTape() as tape:
-            current_Q = self.critic_model([states, actions], training=True)[:, 0]
-            critic_loss = tf.losses.mse(target_Q, current_Q)
-        critic_grad = tape.gradient(critic_loss, self.critic_model.trainable_variables)
-        self.critic_optimizer.apply_gradients(zip(critic_grad, self.critic_model.trainable_variables))
+            current_Q1 = self.critic1_model([states, actions], training=True)[:, 0]
+            current_Q2 = self.critic2_model([states, actions], training=True)[:, 0]
+            critic1_loss = tf.losses.mse(target_Q, current_Q1)
+            critic2_loss = tf.losses.mse(target_Q, current_Q2)
+
+        critic1_grad = tape.gradient(critic1_loss, self.critic1_model.trainable_variables)
+        critic2_grad = tape.gradient(critic2_loss, self.critic2_model.trainable_variables)
+
+        self.critic1_optimizer.apply_gradients(zip(critic1_grad, self.critic1_model.trainable_variables))
+        self.critic2_optimizer.apply_gradients(zip(critic2_grad, self.critic2_model.trainable_variables))
+
         
     def train(self, states, actions, returns, next_states, dones):
         states, actions, returns = np.array(states, np.float32), np.array(actions, np.float32), np.array(returns, np.float32)
         next_states, dones = np.array(next_states, np.float32), np.array(dones, np.float32)
         self._train(states, actions, returns, next_states, dones)
 
-        self.critic_target.set_weights(np.array(self.critic_model.weights) * self.tau + np.array(self.critic_target.weights) * (1 - self.tau))
-        self.actor_target.set_weights(np.array(self.actor_model.weights) * self.tau + np.array(self.actor_target.weights) * (1 - self.tau))
+        if self.i % self.policy_delay == 0:
+            self.critic1_target.set_weights(np.array(self.critic1_model.weights) * self.tau + np.array(self.critic1_target.weights) * (1 - self.tau))
+            self.critic2_target.set_weights(np.array(self.critic2_model.weights) * self.tau + np.array(self.critic2_target.weights) * (1 - self.tau))
+            self.actor_target.set_weights(np.array(self.actor_model.weights) * self.tau + np.array(self.actor_target.weights) * (1 - self.tau))
 
     @tf.function
     def _predict_actions(self, states):
@@ -117,7 +144,9 @@ class Network:
         # TODO: Predict actions by the target actor and evaluate them using
         # target_critic.
         actions = self.actor_target(states)
-        return self.critic_target([states, actions])
+        actions += tf.clip_by_value(tf.random.normal(self.action_components, stddev=self.action_noise), -self.action_clip, self.actions_clip)
+        actions = tf.clip_by_value(actions, self.action_lows, self.action_highs)
+        return min(self.critic1_target([states, actions]), self.critic2_target([states, actions]))
 
     def predict_values(self, states):
         states = np.array(states, np.float32)
@@ -145,18 +174,21 @@ if __name__ == "__main__":
     # Parse arguments
     import argparse
     parser = argparse.ArgumentParser()
-    parser.add_argument("--batch_size", default=512, type=int, help="Batch size.")
+    parser.add_argument("--gamma", default=0.99, type=int, help="Discount factor.")
+    parser.add_argument("--batch_size", default=384, type=int, help="Batch size.")
+    parser.add_argument("--delay_update", default=2, type=int, help="How often policy is updated")
     parser.add_argument("--env", default="BipedalWalker-v2", type=str, help="Environment.")
+    parser.add_argument("--hidden_layer", default=200, type=int, help="Size of hidden layer.")
     parser.add_argument("--evaluate_each", default=50, type=int, help="Evaluate each number of episodes.")
     parser.add_argument("--evaluate_for", default=10, type=int, help="Evaluate for number of batches.")
-    parser.add_argument("--noise_sigma", default=0.15, type=float, help="UB noise sigma.")
+    parser.add_argument("--noise_sigma", default=0.2, type=float, help="UB noise sigma.")
     parser.add_argument("--noise_theta", default=0.15, type=float, help="UB noise theta.")
-    parser.add_argument("--gamma", default=0.99, type=float, help="Discounting factor.")
-    parser.add_argument("--hidden_layer", default=128, type=int, help="Size of hidden layers.")
-    parser.add_argument("--actor_lr", default=3e-4, type=float, help="Learning rate.")
-    parser.add_argument("--critic_lr", default=1e-3, type=float, help="Learning rate.")
-    parser.add_argument("--render_each", default=0, type=int, help="Render some episodes.")
+    parser.add_argument("--action_noise_sigma", default=0.2, type=float, help="Action noise sigma.")
+    parser.add_argument("--action_noise_clip", default=0.5, type=float, help="Action noise clipping.")
+    parser.add_argument("--critic_lr", default=8e-4, type=float, help="Learning rate.")
+    parser.add_argument("--actor_lr", default=8e-4, type=float, help="Learning rate.")
     parser.add_argument("--target_tau", default=8e-3, type=float, help="Target network update weight.")
+    parser.add_argument("--render_each", default=0, type=int, help="Render some episodes.")
     parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
     args = parser.parse_args()
 
@@ -186,7 +218,7 @@ if __name__ == "__main__":
             noise.reset()
             while not done:
                 # TODO: Perform an action and store the transition in the replay buffer
-                action = np.clip(network.predict_actions([state])[0] + noise.sample(), action_lows, action_highs)
+                action = np.clip(network.predict_actions([state])[0] + noise.sample() * 0.6, action_lows, action_highs)
                 next_state, reward, done, _ = env.step(action)
                 replay_buffer.append(Transition(state, action, reward, done, next_state))
                 state = next_state
