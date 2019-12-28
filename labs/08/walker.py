@@ -144,7 +144,7 @@ class Network:
         # TODO: Predict actions by the target actor and evaluate them using
         # target_critic.
         actions = self.actor_target(states)
-        actions += tf.clip_by_value(tf.random.normal(self.action_components, stddev=self.action_noise), -self.action_clip, self.actions_clip)
+        actions += tf.clip_by_value(tf.random.normal((self.action_components,), stddev=self.action_noise), -self.action_clip, self.actions_clip)
         actions = tf.clip_by_value(actions, self.action_lows, self.action_highs)
         return min(self.critic1_target([states, actions]), self.critic2_target([states, actions]))
 
