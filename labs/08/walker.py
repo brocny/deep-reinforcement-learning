@@ -20,7 +20,7 @@ class Network:
         self.tau = args.target_tau
         self.gamma = args.gamma
     
-        self.i = 0
+        self.i = -1
         self.policy_delay = args.delay_update
 
         self.action_noise = np.sqrt(args.action_noise_sigma)
@@ -95,8 +95,8 @@ class Network:
         # Furthermore, update the weights of the target actor and critic networks
         # by using args.target_tau option.
         
-        self.i += 1
         # Actor training
+        self.i += 1
         if self.i % self.policy_delay == 0:
             with tf.GradientTape() as tape:
                 a = self.actor_model(states, training=True)
@@ -107,16 +107,16 @@ class Network:
         # Critics training
         values = self._predict_values(next_states)[:, 0]
         target_Q = returns + values * (1 - dones) * self.gamma
-        with tf.GradientTape() as tape:
+        with tf.GradientTape() as tape1:
             current_Q1 = self.critic1_model([states, actions], training=True)[:, 0]
-            current_Q2 = self.critic2_model([states, actions], training=True)[:, 0]
             critic1_loss = tf.losses.mse(target_Q, current_Q1)
-            critic2_loss = tf.losses.mse(target_Q, current_Q2)
-
-        critic1_grad = tape.gradient(critic1_loss, self.critic1_model.trainable_variables)
-        critic2_grad = tape.gradient(critic2_loss, self.critic2_model.trainable_variables)
-
+        critic1_grad = tape1.gradient(critic1_loss, self.critic1_model.trainable_variables)
         self.critic1_optimizer.apply_gradients(zip(critic1_grad, self.critic1_model.trainable_variables))
+
+        with tf.GradientTape() as tape2:
+            current_Q2 = self.critic2_model([states, actions], training=True)[:, 0]
+            critic2_loss = tf.losses.mse(target_Q, current_Q2)
+        critic2_grad = tape2.gradient(critic2_loss, self.critic2_model.trainable_variables)
         self.critic2_optimizer.apply_gradients(zip(critic2_grad, self.critic2_model.trainable_variables))
 
         
@@ -144,9 +144,9 @@ class Network:
         # TODO: Predict actions by the target actor and evaluate them using
         # target_critic.
         actions = self.actor_target(states)
-        actions += tf.clip_by_value(tf.random.normal((self.action_components,), stddev=self.action_noise), -self.action_clip, self.actions_clip)
+        actions += tf.clip_by_value(tf.random.normal((self.action_components,), stddev=self.action_noise), -self.action_clip, self.action_clip)
         actions = tf.clip_by_value(actions, self.action_lows, self.action_highs)
-        return min(self.critic1_target([states, actions]), self.critic2_target([states, actions]))
+        return tf.minimum(self.critic1_target([states, actions]), self.critic2_target([states, actions]))
 
     def predict_values(self, states):
         states = np.array(states, np.float32)
@@ -175,7 +175,7 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--gamma", default=0.99, type=int, help="Discount factor.")
-    parser.add_argument("--batch_size", default=384, type=int, help="Batch size.")
+    parser.add_argument("--batch_size", default=256, type=int, help="Batch size.")
     parser.add_argument("--delay_update", default=2, type=int, help="How often policy is updated")
     parser.add_argument("--env", default="BipedalWalker-v2", type=str, help="Environment.")
     parser.add_argument("--hidden_layer", default=200, type=int, help="Size of hidden layer.")
@@ -187,7 +187,7 @@ if __name__ == "__main__":
     parser.add_argument("--action_noise_clip", default=0.5, type=float, help="Action noise clipping.")
     parser.add_argument("--critic_lr", default=8e-4, type=float, help="Learning rate.")
     parser.add_argument("--actor_lr", default=8e-4, type=float, help="Learning rate.")
-    parser.add_argument("--target_tau", default=8e-3, type=float, help="Target network update weight.")
+    parser.add_argument("--target_tau", default=7e-3, type=float, help="Target network update weight.")
     parser.add_argument("--render_each", default=0, type=int, help="Render some episodes.")
     parser.add_argument("--threads", default=1, type=int, help="Maximum number of threads to use.")
     args = parser.parse_args()
