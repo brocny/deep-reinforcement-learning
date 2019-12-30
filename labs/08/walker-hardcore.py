@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env optirun python3.7
 
 #dd7e3410-38c0-11e8-9b58-00505601122b
 #6e14ef6b-3281-11e8-9de3-00505601122b
@@ -70,13 +70,14 @@ class Network:
 
     def make_critic(self, env, args):
         inp = tf.keras.layers.Input(env.state_shape)
-        action_inp = tf.keras.layers.Input(env.action_shape))
+        action_inp = tf.keras.layers.Input(env.action_shape)
 
-        hidden = tf.keras.layers.Concatenate()([inp, action_inp])
+        hidden_s = tf.keras.layers.Dense(192, activation=tf.nn.relu)(inp)
+
+        hidden = tf.keras.layers.Concatenate()([hidden_s, action_inp])
         
         hidden = tf.keras.layers.Dense(256, activation=tf.nn.relu)(hidden)
         hidden = tf.keras.layers.Dense(192, activation=tf.nn.relu)(hidden)
-        hidden = tf.keras.layers.Dense(128, activation=tf.nn.relu)(hidden)
 
         critic_out = tf.keras.layers.Dense(1, activation=None)(hidden)
         critic_model = tf.keras.Model(inputs=[inp, action_inp], outputs=critic_out)
