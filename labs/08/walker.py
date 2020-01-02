@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin/env optirun python3.7
 
 #dd7e3410-38c0-11e8-9b58-00505601122b
 #6e14ef6b-3281-11e8-9de3-00505601122b
@@ -33,9 +33,8 @@ class Network:
         if not args.actor_path:
             inp = tf.keras.layers.Input(env.state_shape)
 
-            hidden = tf.keras.layers.Dense(256, activation=tf.nn.relu)(inp)
-            hidden = tf.keras.layers.Dense(192, activation=tf.nn.relu)(hidden)
-            hidden = tf.keras.layers.Dense(128, activation=tf.nn.relu)(hidden)
+            hidden = tf.keras.layers.Dense(400, activation=tf.nn.relu)(inp)
+            hidden = tf.keras.layers.Dense(300, activation=tf.nn.relu)(hidden)
 
             hidden = tf.keras.layers.Dense(action_components, activation=tf.nn.tanh)(hidden)
             out_actor = tf.multiply(hidden, self.action_highs)
@@ -43,6 +42,7 @@ class Network:
             self.actor_model = tf.keras.Model(inputs=inp, outputs=out_actor)
             self.actor_target = tf.keras.models.clone_model(self.actor_model)
         else:
+            import embedded_data
             self.actor_model = tf.keras.models.load_model(args.actor_path)
             if args.train:
                 self.actor_target = tf.keras.models.clone_model(self.actor_model)
@@ -74,9 +74,8 @@ class Network:
 
         hidden = tf.keras.layers.Concatenate()([inp, action_inp])
         
-        hidden = tf.keras.layers.Dense(256, activation=tf.nn.relu)(hidden)
-        hidden = tf.keras.layers.Dense(192, activation=tf.nn.relu)(hidden)
-        hidden = tf.keras.layers.Dense(128, activation=tf.nn.relu)(hidden)
+        hidden = tf.keras.layers.Dense(400, activation=tf.nn.relu)(hidden)
+        hidden = tf.keras.layers.Dense(300, activation=tf.nn.relu)(hidden)
 
         critic_out = tf.keras.layers.Dense(1, activation=None)(hidden)
         critic_model = tf.keras.Model(inputs=[inp, action_inp], outputs=critic_out)
@@ -186,8 +185,8 @@ if __name__ == "__main__":
     parser.add_argument("--train", action='store_true', help="Whether to train or just evaluate.")
     parser.add_argument("--critic_path1", type=str, default=None)
     parser.add_argument("--critic_path2", type=str, default=None)
-    parser.add_argument("--actor_path", type=str, default=None)
-    args = parser.parse_args(['--train'])
+    parser.add_argument("--actor_path", type=str, default='actor.h5')
+    args = parser.parse_args([])
 
     # Fix random seeds and number of threads
     np.random.seed(42)
